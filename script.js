@@ -1,7 +1,9 @@
 class BingoAnalyzer {
   constructor() {
-    this.dataset1 = null
-    this.dataset2 = null
+    this.dataset1 = null // Stores { id: number, data: int[][] }
+    this.dataset2 = null // Stores { id: number, data: int[][] }
+    this.shuffledDataset = null // Stores the result of shuffling
+
     this.initializeEventListeners()
   }
 
@@ -11,6 +13,7 @@ class BingoAnalyzer {
     document.getElementById("analyzeBtn").addEventListener("click", () => this.analyzeDataset())
     document.getElementById("compareBtn").addEventListener("click", () => this.compareDatasets())
     document.getElementById("clearBtn").addEventListener("click", () => this.clearAll())
+    document.getElementById("shuffleBtn").addEventListener("click", () => this.shuffleCardIds())
   }
 
   async handleFileUpload(event, fileNumber) {
@@ -40,26 +43,112 @@ class BingoAnalyzer {
 
       this.updateButtonStates()
     } catch (error) {
-      infoElement.innerHTML = `<span style="color: #dc3545;">Error: Invalid JSON file</span>`
+      infoElement.innerHTML = `<span style="color: #dc3545;">Error: Invalid JSON file or unsupported format.</span>`
       console.error("File parsing error:", error)
     }
   }
 
-  normalizeData(data) {
-    // Handle object format: {"1": [[...]], "2": [[...]]}
-    if (typeof data === "object" && !Array.isArray(data)) {
-      return Object.values(data)
+  /**
+   * Helper to convert a flat 24-number array to a 5x5 2D array with a FREE space (-1) at the center.
+   */
+  convertFlatTo2D(flatNumbers) {
+    const card = Array(5)
+      .fill(0)
+      .map(() => Array(5).fill(0))
+    let flatIndex = 0
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (r === 2 && c === 2) {
+          card[r][c] = -1 // FREE space
+        } else {
+          if (flatIndex < flatNumbers.length) {
+            card[r][c] = flatNumbers[flatIndex]
+            flatIndex++
+          } else {
+            // Handle case where flatNumbers might be less than 24 (shouldn't happen with valid data)
+            console.warn("Not enough numbers in flat array to fill 5x5 card.")
+            card[r][c] = 0 // Default to 0 or throw error
+          }
+        }
+      }
     }
-    // Handle array format: [[[...]], [[...]]]
-    return data
+    return card
+  }
+
+  /**
+   * Normalizes various JSON input formats into a consistent array of objects:
+   * [{ id: number, data: int[][] }]
+   */
+  normalizeData(data) {
+    const normalizedCards = []
+
+    if (typeof data === "object" && !Array.isArray(data)) {
+      // Case 1 & 2: Root is an object (keys are IDs)
+      for (const key in data) {
+        if (data.hasOwnProperty(key)) {
+          const cardId = Number.parseInt(key, 10)
+          if (isNaN(cardId)) {
+            console.warn(`Skipping non-integer key in JSON object: ${key}`)
+            continue
+          }
+          const cardContent = data[key]
+
+          if (Array.isArray(cardContent)) {
+            // Case 1: Old 2D array format
+            if (cardContent.length === 5 && cardContent.every((row) => Array.isArray(row) && row.length === 5)) {
+              normalizedCards.push({ id: cardId, data: cardContent })
+            } else {
+              console.warn(`Card ${cardId}: Invalid 2D array structure.`)
+            }
+          } else if (typeof cardContent === "object" && cardContent.hasOwnProperty("bingo_numbers")) {
+            // Case 2: New flat array format within an object
+            const flatNumbers = cardContent.bingo_numbers
+            if (Array.isArray(flatNumbers) && flatNumbers.length === 24) {
+              normalizedCards.push({ id: cardId, data: this.convertFlatTo2D(flatNumbers) })
+            } else {
+              console.warn(`Card ${cardId}: bingo_numbers is not a valid 24-element array.`)
+            }
+          } else {
+            console.warn(`Card ${cardId}: Unknown card content format.`)
+          }
+        }
+      }
+    } else if (Array.isArray(data)) {
+      // Case 3: Root is an array (each element is a card object)
+      data.forEach((cardObject) => {
+        if (
+          typeof cardObject === "object" &&
+          cardObject.hasOwnProperty("cartela_no") &&
+          cardObject.hasOwnProperty("bingo_numbers")
+        ) {
+          const cardId = cardObject.cartela_no
+          const flatNumbers = cardObject.bingo_numbers
+          if (Array.isArray(flatNumbers) && flatNumbers.length === 24) {
+            normalizedCards.push({ id: cardId, data: this.convertFlatTo2D(flatNumbers) })
+          } else {
+            console.warn(`Card with cartela_no ${cardId}: bingo_numbers is not a valid 24-element array.`)
+          }
+        } else {
+          console.warn("Array element is not a valid card object (missing cartela_no or bingo_numbers).")
+        }
+      })
+    } else {
+      throw new Error("Unsupported JSON root format.")
+    }
+
+    // Sort by ID for consistent processing and display
+    normalizedCards.sort((a, b) => a.id - b.id)
+    return normalizedCards
   }
 
   updateButtonStates() {
     const analyzeBtn = document.getElementById("analyzeBtn")
     const compareBtn = document.getElementById("compareBtn")
+    const shuffleBtn = document.getElementById("shuffleBtn")
 
     analyzeBtn.disabled = !this.dataset1
     compareBtn.disabled = !this.dataset1 || !this.dataset2
+    shuffleBtn.disabled = !this.dataset1
   }
 
   showLoading() {
@@ -121,7 +210,7 @@ class BingoAnalyzer {
       structureValidation: { valid: 0, invalid: 0 },
     }
 
-    const cardHashes = new Map()
+    const cardHashes = new Map() // Stores hash -> original card ID
     const columns = ["B", "I", "N", "G", "O"]
     const ranges = [
       [1, 15],
@@ -131,46 +220,33 @@ class BingoAnalyzer {
       [61, 75],
     ]
 
-    dataset.forEach((card, cardIndex) => {
+    dataset.forEach((cardObj) => {
+      const cardId = cardObj.id
+      const card = cardObj.data // The 5x5 2D array
       let isValidCard = true
       const cardErrors = []
 
       // Structure validation
-      if (!Array.isArray(card) || card.length !== 5) {
+      if (!Array.isArray(card) || card.length !== 5 || !card.every((row) => Array.isArray(row) && row.length === 5)) {
         isValidCard = false
-        cardErrors.push("Invalid card structure")
+        cardErrors.push("Invalid card structure (not 5x5 array)")
         analysis.structureValidation.invalid++
       } else {
-        let validRows = 0
-        card.forEach((row, rowIndex) => {
-          if (Array.isArray(row) && row.length === 5) {
-            validRows++
-          }
-        })
+        analysis.structureValidation.valid++
 
-        if (validRows === 5) {
-          analysis.structureValidation.valid++
-        } else {
-          isValidCard = false
-          cardErrors.push("Invalid row structure")
-          analysis.structureValidation.invalid++
-        }
-      }
-
-      if (Array.isArray(card) && card.length === 5) {
         // Free space validation (center should be -1 or "FREE")
         const centerValue = card[2][2]
         if (centerValue === -1 || centerValue === "FREE") {
           analysis.freeSpaceValidation.correct++
         } else {
           analysis.freeSpaceValidation.incorrect++
-          cardErrors.push("Invalid free space")
+          cardErrors.push("Invalid free space (center is not -1 or 'FREE')")
           isValidCard = false
         }
 
         // Number range and distribution validation
         let rangeValid = true
-        const cardNumbers = new Set()
+        const cardNumbers = new Set() // To check for duplicates within the card
 
         card.forEach((row, rowIndex) => {
           row.forEach((value, colIndex) => {
@@ -197,8 +273,11 @@ class BingoAnalyzer {
                 analysis.numberDistribution[column][value]++
               } else {
                 rangeValid = false
-                cardErrors.push(`Number ${value} out of range for column ${column}`)
+                cardErrors.push(`Number ${value} out of range for column ${column} (${min}-${max})`)
               }
+            } else {
+              cardErrors.push(`Non-numeric value '${value}' found in card`)
+              isValidCard = false
             }
           })
         })
@@ -210,17 +289,17 @@ class BingoAnalyzer {
           isValidCard = false
         }
 
-        // Duplicate card detection
+        // Duplicate card detection (based on content, not ID)
         const cardHash = this.generateCardHash(card)
         if (cardHashes.has(cardHash)) {
           analysis.duplicateCards.push({
-            card1: cardHashes.get(cardHash),
-            card2: cardIndex + 1,
+            card1: cardHashes.get(cardHash), // Original ID of the first occurrence
+            card2: cardId, // Current card's ID
             hash: cardHash,
           })
-          isValidCard = false
+          isValidCard = false // Mark as invalid if it's a duplicate
         } else {
-          cardHashes.set(cardHash, cardIndex + 1)
+          cardHashes.set(cardHash, cardId)
         }
       }
 
@@ -229,7 +308,7 @@ class BingoAnalyzer {
       } else {
         analysis.invalidCards++
         analysis.validationResults.push({
-          cardNumber: cardIndex + 1,
+          cardNumber: cardId, // Use the actual card ID
           errors: cardErrors,
         })
       }
@@ -239,6 +318,7 @@ class BingoAnalyzer {
   }
 
   generateCardHash(card) {
+    // Ensure -1 is treated consistently as "FREE" for hashing
     return JSON.stringify(card.map((row) => row.map((val) => (val === -1 || val === "FREE" ? "FREE" : val))))
   }
 
@@ -246,12 +326,12 @@ class BingoAnalyzer {
     const analysis1 = this.performAnalysis(dataset1)
     const analysis2 = this.performAnalysis(dataset2)
 
-    // Find common cards
+    // Find common cards based on content hash
     const hashes1 = new Set()
     const hashes2 = new Set()
 
-    dataset1.forEach((card) => hashes1.add(this.generateCardHash(card)))
-    dataset2.forEach((card) => hashes2.add(this.generateCardHash(card)))
+    dataset1.forEach((cardObj) => hashes1.add(this.generateCardHash(cardObj.data)))
+    dataset2.forEach((cardObj) => hashes2.add(this.generateCardHash(cardObj.data)))
 
     const commonCards = [...hashes1].filter((hash) => hashes2.has(hash))
     const uniqueToDataset1 = [...hashes1].filter((hash) => !hashes2.has(hash))
@@ -479,6 +559,7 @@ class BingoAnalyzer {
   clearAll() {
     this.dataset1 = null
     this.dataset2 = null
+    this.shuffledDataset = null
 
     document.getElementById("file1").value = ""
     document.getElementById("file2").value = ""
@@ -487,6 +568,162 @@ class BingoAnalyzer {
     document.getElementById("results").innerHTML = ""
 
     this.updateButtonStates()
+  }
+
+  /**
+   * Shuffles card IDs from an original range to a new target range in reverse order.
+   * Only cards within the specified original range are included in the output.
+   * The length of the original range must match the length of the new target range.
+   */
+  shuffleCardIds() {
+    const originalStartId = Number.parseInt(document.getElementById("originalStartId").value, 10)
+    const originalEndId = Number.parseInt(document.getElementById("originalEndId").value, 10)
+    const newStartId = Number.parseInt(document.getElementById("newStartId").value, 10)
+    const newEndId = Number.parseInt(document.getElementById("newEndId").value, 10)
+
+    // Validate input ranges
+    if (
+      isNaN(originalStartId) ||
+      isNaN(originalEndId) ||
+      isNaN(newStartId) ||
+      isNaN(newEndId) ||
+      originalStartId <= 0 ||
+      originalEndId <= 0 ||
+      newStartId <= 0 ||
+      newEndId <= 0 ||
+      originalStartId > originalEndId ||
+      newStartId > newEndId
+    ) {
+      this.displayError(
+        "Invalid ID ranges. Please enter positive numbers where Start ID <= End ID for both original and new ranges.",
+      )
+      return
+    }
+
+    if (!this.dataset1) {
+      this.displayError("Please load a primary dataset before shuffling.")
+      return
+    }
+
+    this.showLoading()
+
+    setTimeout(() => {
+      try {
+        // Filter to only include cards within the specified original range
+        const cardsToShuffle = this.dataset1.filter((card) => card.id >= originalStartId && card.id <= originalEndId)
+
+        if (cardsToShuffle.length === 0) {
+          this.displayError("No cards found in the specified original ID range within the loaded dataset.")
+          return
+        }
+
+        const originalRangeLength = originalEndId - originalStartId + 1
+        const newRangeLength = newEndId - newStartId + 1
+
+        // Crucial check: Ensure the number of cards in the original range matches the new target range length
+        if (originalRangeLength !== newRangeLength) {
+          this.displayError(
+            `Number of cards in original range (${originalRangeLength}) does not match the length of the new target range (${newRangeLength}). Please adjust ranges for a 1:1 shuffle.`,
+          )
+          return
+        }
+
+        // Sort cardsToShuffle by their original ID to ensure consistent reverse mapping
+        cardsToShuffle.sort((a, b) => a.id - b.id)
+
+        const shuffledCards = []
+        const remapping = []
+
+        // Apply reverse mapping for IDs within the range
+        for (let j = 0; j < cardsToShuffle.length; j++) {
+          const card = cardsToShuffle[j]
+          const originalId = card.id
+
+          // Calculate the new relative position in reverse order
+          const newRelativePos = cardsToShuffle.length - 1 - j
+
+          // Calculate the new ID based on the new target range's start and the new relative position
+          const newId = newStartId + newRelativePos
+
+          shuffledCards.push({ id: newId, data: card.data })
+          remapping.push({ original: originalId, new: newId })
+        }
+
+        // Sort the shuffled cards by their new IDs for consistent display/analysis
+        shuffledCards.sort((a, b) => a.id - b.id)
+
+        this.shuffledDataset = shuffledCards
+        this.displayShuffleResults(remapping, shuffledCards.length)
+      } catch (error) {
+        console.error("Shuffle error:", error)
+        this.displayError("Card ID shuffling failed. " + error.message)
+      } finally {
+        this.hideLoading()
+      }
+    }, 100)
+  }
+
+  displayShuffleResults(remapping, totalShuffledCards) {
+    const resultsContainer = document.getElementById("results")
+    const remappingHtml = remapping.map((m) => `<li>Card ID ${m.original} &rarr; ${m.new}</li>`).join("")
+
+    resultsContainer.innerHTML = `
+        <div class="result-section">
+            <h2>🔀 Card ID Shuffle Results</h2>
+            <p>Successfully remapped ${remapping.length} card IDs within the specified range.</p>
+            <p>Total cards in the new shuffled dataset: ${totalShuffledCards}</p>
+            <div class="shuffle-remapping">
+                <h3>ID Remapping:</h3>
+                <ul>${remappingHtml}</ul>
+            </div>
+            <button id="downloadShuffledJsonBtn" class="btn-primary" style="margin-top: 20px;">
+                <span class="btn-icon">⬇️</span> Download Shuffled JSON
+            </button>
+            <button id="useShuffledDatasetBtn" class="btn-secondary" style="margin-top: 20px; margin-left: 10px;">
+                <span class="btn-icon">🔄</span> Use Shuffled for Analysis
+            </button>
+        </div>
+    `
+    document.getElementById("downloadShuffledJsonBtn").addEventListener("click", () => this.downloadShuffledJson())
+    document.getElementById("useShuffledDatasetBtn").addEventListener("click", () => this.useShuffledDataset())
+  }
+
+  downloadShuffledJson() {
+    if (!this.shuffledDataset) {
+      alert("No shuffled dataset to download.")
+      return
+    }
+    const outputData = {}
+    this.shuffledDataset.forEach((card) => {
+      outputData[card.id] = card.data // Convert back to the object-based 2D array format
+    })
+    const jsonString = JSON.stringify(outputData, null, 2)
+    const blob = new Blob([jsonString], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "shuffled_cartelas.json"
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  useShuffledDataset() {
+    if (this.shuffledDataset) {
+      this.dataset1 = this.shuffledDataset // Replace dataset1 with the shuffled one
+      document.getElementById("file1-info").innerHTML = `
+            <strong>Shuffled Dataset</strong><br>
+            ${this.dataset1.length} cards loaded (remapped)
+        `
+      this.dataset2 = null // Clear dataset2 to avoid confusion
+      document.getElementById("file2").value = ""
+      document.getElementById("file2-info").textContent = ""
+      this.updateButtonStates()
+      alert("Shuffled dataset is now set as Primary Dataset for analysis/comparison.")
+    } else {
+      alert("No shuffled dataset available.")
+    }
   }
 }
 

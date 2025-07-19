@@ -150,6 +150,66 @@ header p {
   box-shadow: none;
 }
 
+.shuffle-section {
+  padding: 40px;
+  background: #e9ecef; /* A slightly different background for distinction */
+  border-top: 1px solid #dee2e6;
+  text-align: center;
+  border-radius: 0 0 20px 20px; /* Rounded bottom corners */
+}
+
+.shuffle-section h2 {
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.shuffle-section p {
+  margin-bottom: 25px;
+  color: #555;
+  font-size: 1rem;
+}
+
+.shuffle-inputs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.input-group label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.input-group input[type="number"] {
+  padding: 12px 15px;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  width: 120px;
+  text-align: center;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.input-group input[type="number"]:focus {
+  outline: none;
+  border-color: #4facfe;
+  box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.25);
+}
+
 .results-container {
   padding: 40px;
   background: white;
@@ -318,6 +378,37 @@ header p {
   font-size: 0.9rem;
 }
 
+.shuffle-remapping {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #f0f2f5;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+  text-align: left;
+}
+
+.shuffle-remapping h3 {
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.shuffle-remapping ul {
+  list-style: none;
+  padding: 0;
+}
+
+.shuffle-remapping li {
+  padding: 5px 0;
+  border-bottom: 1px dashed #ccc;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.shuffle-remapping li:last-child {
+  border-bottom: none;
+}
+
 .loading {
   display: none;
   position: fixed;
@@ -383,5 +474,14 @@ header p {
 
   .comparison-section {
     grid-template-columns: 1fr;
+  }
+
+  .shuffle-inputs {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .input-group {
+    align-items: center;
   }
 }

@@ -50,6 +50,33 @@
             </button>
         </div>
 
+        <div class="shuffle-section">
+            <h2>🔀 Card ID Shuffler</h2>
+            <p>Remap card IDs from an original range to a new target range in reverse order.</p>
+            <div class="shuffle-inputs">
+                <div class="input-group">
+                    <label for="originalStartId">Original Start ID:</label>
+                    <input type="number" id="originalStartId" value="1" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="originalEndId">Original End ID:</label>
+                    <input type="number" id="originalEndId" value="1000" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="newStartId">New Start ID:</label>
+                    <input type="number" id="newStartId" value="1" min="1">
+                </div>
+                <div class="input-group">
+                    <label for="newEndId">New End ID:</label>
+                    <input type="number" id="newEndId" value="1000" min="1">
+                </div>
+            </div>
+            <button id="shuffleBtn" class="btn-primary">
+                <span class="btn-icon">🔀</span>
+                Shuffle IDs
+            </button>
+        </div>
+
         <div class="results-container" id="results">
             <!-- Results will be populated here -->
         </div>
