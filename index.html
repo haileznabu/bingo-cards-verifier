@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BINGO Card Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 BINGO Card Analyzer</h1>
+            <p>Analyze uniqueness, statistics, and compare BINGO card datasets</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="file-upload">
+                <h3>Primary Dataset</h3>
+                <input type="file" id="file1" accept=".json" />
+                <label for="file1" class="file-label">
+                    <span class="file-icon">📁</span>
+                    Choose JSON File
+                </label>
+                <div class="file-info" id="file1-info"></div>
+            </div>
+
+            <div class="file-upload">
+                <h3>Secondary Dataset (Optional)</h3>
+                <input type="file" id="file2" accept=".json" />
+                <label for="file2" class="file-label">
+                    <span class="file-icon">📁</span>
+                    Choose JSON File
+                </label>
+                <div class="file-info" id="file2-info"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="analyzeBtn" class="btn-primary" disabled>
+                <span class="btn-icon">🔍</span>
+                Analyze Cards
+            </button>
+            <button id="compareBtn" class="btn-secondary" disabled>
+                <span class="btn-icon">⚖️</span>
+                Compare Datasets
+            </button>
+            <button id="clearBtn" class="btn-clear">
+                <span class="btn-icon">🗑️</span>
+                Clear All
+            </button>
+        </div>
+
+        <div class="results-container" id="results">
+            <!-- Results will be populated here -->
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing cards...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
